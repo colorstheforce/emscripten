@@ -10829,3 +10829,14 @@ void foo() {}
     # When WebGL is explicitly linked to in strict mode, the linking order on command line should enable overriding.
     self.emcc_args += ['-sAUTO_JS_LIBRARIES=0', '-lwebgl.js', '--js-library', test_file('test_override_system_js_lib_symbol.js')]
     self.do_run_in_out_file_test(test_file('test_override_system_js_lib_symbol.c'))
+
+  @node_pthreads
+  def test_pthread_js_exception(self):
+    # Ensure that JS exceptions propagate back to the main main thread and cause node
+    # to exit with an error.
+    self.set_setting('USE_PTHREADS')
+    self.set_setting('PROXY_TO_PTHREAD')
+    self.set_setting('EXIT_RUNTIME')
+    self.build(test_file('other', 'test_pthread_js_exception.c'))
+    err = self.run_js('test_pthread_js_exception.js', assert_returncode=NON_ZERO)
+    self.assertContained('missing is not defined', err)
