@@ -426,15 +426,10 @@ EMSCRIPTEN_RESULT emscripten_wait_for_call_i(
   return res;
 }
 
-static pthread_t main_browser_thread_id_ = 0;
-
-void emscripten_register_main_browser_thread_id(
-  pthread_t main_browser_thread_id) {
-  main_browser_thread_id_ = main_browser_thread_id;
-}
+static struct pthread __main_pthread;
 
 pthread_t emscripten_main_browser_thread_id() {
-  return main_browser_thread_id_;
+  return &__main_pthread;
 }
 
 int _emscripten_do_dispatch_to_thread(pthread_t target_thread, em_queued_call* call) {
@@ -970,8 +965,8 @@ void __do_cleanup_pop(struct __ptcb *cb) {
   __pthread_self()->cancelbuf = cb->__next;
 }
 
-EM_JS(void, initPthreadsJS, (void), {
-  PThread.initRuntime();
+EM_JS(void, initPthreadsJS, (void* tb), {
+  PThread.initRuntime(tb);
 })
 
 // We must initialize the runtime at the proper time, which is after memory is
@@ -982,8 +977,17 @@ EM_JS(void, initPthreadsJS, (void), {
 EMSCRIPTEN_KEEPALIVE
 __attribute__((constructor(48)))
 void __emscripten_pthread_data_constructor(void) {
-  initPthreadsJS();
-  pthread_self()->locale = &libc.global_locale;
+  initPthreadsJS(&__main_pthread);
+  // The pthread struct has a field that points to itself - this is used as
+  // a magic ID to detect whether the pthread_t structure is 'alive'.
+  __main_pthread.self = &__main_pthread;
+      // pthread struct robust_list head should point to itself.
+  __main_pthread.robust_list.head = &__main_pthread.robust_list;
+
+  // Main thread ID.
+  __main_pthread.tid = (long)&__main_pthread;
+
+  __main_pthread.locale = &libc.global_locale;
 }
 
 extern int __pthread_create_js(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine) (void *), void *arg);
